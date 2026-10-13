@@ -17,14 +17,4 @@ The objective of this project is to automate the end-to-end recovery of 3D geome
 2. **Disparity and Depth Recovery**: Solving scanline correspondence matching to extract a dense depth map.
 3. **3D Reconstruction**: Filtering depth noise and projecting the depth map into a 3D polygonal mesh or point cloud.
 
-## Installation
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-pip install -e .
-```
-
 # THIS IS UNDER DEVELOPMENT!!!
-```
