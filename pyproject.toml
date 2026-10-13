@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stereo3d"
+version = "0.1.0"
+description = "Autostereogram to 3D reconstruction framework"
+authors = [{ name = "Stereo3D Contributors" }]
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "numpy>=1.24.0",
+    "scipy>=1.10.0",
+    "pillow>=10.0.0",
+    "opencv-python>=4.8.0",
+    "matplotlib>=3.7.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+]
+
+[project.scripts]
+stereo3d = "stereo3d.cli:main"
