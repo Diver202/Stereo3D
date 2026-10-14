@@ -24,3 +24,6 @@ dev = [
 
 [project.scripts]
 stereo3d = "stereo3d.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["stereo3d*"]
