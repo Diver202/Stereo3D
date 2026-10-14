@@ -13,6 +13,10 @@ from .depth import (
     DepthMapResult,
     extract_depth_map,
 )
+from .mesh import (
+    MeshGenerator,
+    MeshResult,
+)
 
 __all__ = [
     "StereogramImage",
@@ -22,4 +26,6 @@ __all__ = [
     "DepthExtractor",
     "DepthMapResult",
     "extract_depth_map",
+    "MeshGenerator",
+    "MeshResult",
 ]

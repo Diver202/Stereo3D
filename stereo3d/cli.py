@@ -4,8 +4,10 @@ import sys
 
 from .core.datastructures import StereogramImage
 from .core.depth import DepthExtractor
+from .core.mesh import MeshGenerator
 from .core.period import PeriodEstimator
 from .visualization.plotting import plot_depth_analysis
+from .visualization.viewer import launch_viewer
 
 
 def resolve_image_path(image_arg: str, input_dir: Path = Path("input")) -> Path:
@@ -45,7 +47,7 @@ def process_image(args: argparse.Namespace) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     print("==================================================")
-    print("STEREO3D: DEPTH MAP RECONSTRUCTION")
+    print("STEREO3D: RECONSTRUCTION & 3D MESH GENERATION")
     print("==================================================")
     print(f"Input Image     : {image_path}")
 
@@ -87,7 +89,7 @@ def process_image(args: argparse.Namespace) -> int:
     depth_result = extractor.extract(stereo_img)
     print(f"Disparity Range : [0, {depth_result.max_disparity}] px")
 
-    # 3. Save All Outputs
+    # 3. Save Depth Outputs
     stem = image_path.stem
     depth_png = out_dir / f"{stem}_depth.png"
     depth_16bit = out_dir / f"{stem}_depth_16bit.png"
@@ -108,6 +110,25 @@ def process_image(args: argparse.Namespace) -> int:
         show=args.show,
     )
 
+    # 4. Generate 3D Surface Mesh
+    mesh_obj = out_dir / f"{stem}_mesh.obj"
+    mesh_ply = out_dir / f"{stem}_mesh.ply"
+    mesh_result = None
+
+    if not args.no_mesh:
+        print(f"Generating 3D mesh (step: {args.mesh_step}, z_scale: {args.z_scale or 'auto'})...")
+        mesh_gen = MeshGenerator(
+            z_scale=args.z_scale,
+            step=args.mesh_step,
+            color_mode=args.mesh_color,
+            colormap=args.colormap,
+            smooth_normals=True,
+            invert_z=args.invert_z,
+        )
+        mesh_result = mesh_gen.generate(depth_result.depth, stereogram=stereo_img)
+        mesh_result.save_obj(mesh_obj)
+        mesh_result.save_ply(mesh_ply)
+
     print("--------------------------------------------------")
     print("OUTPUT FILES SAVED:")
     print(f"  Standard Depth (8-bit PNG)  : {depth_png}")
@@ -115,8 +136,17 @@ def process_image(args: argparse.Namespace) -> int:
     print(f"  Colorized Depth (RGB PNG)   : {depth_color}")
     print(f"  Raw Array (NumPy .npy)      : {depth_npy}")
     print(f"  Diagnostic Report (Plot PNG): {analysis_plot}")
+    if mesh_result is not None:
+        print(f"  3D Model (Wavefront OBJ)    : {mesh_obj}")
+        print(f"  3D Model (Stanford PLY)     : {mesh_ply}")
+        print(f"  Mesh Statistics             : {mesh_result.num_vertices:,} vertices, {mesh_result.num_triangles:,} triangles")
     print("==================================================")
-    print("Depth extraction completed successfully.")
+    print("Reconstruction completed successfully.")
+
+    if args.view and mesh_result is not None:
+        print("\nLaunching 3D object viewer...")
+        launch_viewer(mesh_obj)
+
     return 0
 
 
@@ -215,6 +245,39 @@ def build_parser() -> argparse.ArgumentParser:
         type=str,
         default="output",
         help="Folder to store reconstructed depth maps.",
+    )
+    parser.add_argument(
+        "--mesh-step",
+        type=int,
+        default=2,
+        help="Subsampling step for 3D mesh grid (default: 2; 1 = full 1:1 pixel resolution).",
+    )
+    parser.add_argument(
+        "--z-scale",
+        type=float,
+        default=None,
+        help="3D extrusion height scale factor (default: 20%% of maximum image dimension).",
+    )
+    parser.add_argument(
+        "--mesh-color",
+        choices=["rgb", "depth", "uniform"],
+        default="rgb",
+        help="Coloring strategy for 3D mesh ('rgb', 'depth', 'uniform').",
+    )
+    parser.add_argument(
+        "--invert-z",
+        action="store_true",
+        help="Invert depth displacement direction (concave vs convex).",
+    )
+    parser.add_argument(
+        "--no-mesh",
+        action="store_true",
+        help="Skip 3D mesh generation.",
+    )
+    parser.add_argument(
+        "--view",
+        action="store_true",
+        help="Open interactive 3D viewer immediately after reconstruction.",
     )
     parser.add_argument(
         "--show",

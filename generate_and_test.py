@@ -13,6 +13,7 @@ from PIL import Image
 
 from stereo3d.core.datastructures import StereogramImage
 from stereo3d.core.depth import DepthExtractor
+from stereo3d.core.mesh import MeshGenerator
 from stereo3d.core.period import PeriodEstimator
 from stereo3d.utils.synthetic import generate_synthetic_stereogram
 
@@ -96,7 +97,18 @@ def run_generate_and_test(args: argparse.Namespace) -> int:
     depth_res.save_color(depth_color, cmap="turbo")
     print(f"Saved colorized depth map          -> {depth_color}")
 
-    # 6. Save visual comparison plot
+    # 6. Generate 3D surface mesh
+    mesh_gen = MeshGenerator(step=2, color_mode="rgb")
+    mesh_res = mesh_gen.generate(rec_depth, stereogram=stereo_img)
+    mesh_obj = out_dir / f"test_{args.shape}_mesh.obj"
+    mesh_ply = out_dir / f"test_{args.shape}_mesh.ply"
+    mesh_res.save_obj(mesh_obj)
+    mesh_res.save_ply(mesh_ply)
+    print(f"Saved 3D mesh (Wavefront OBJ)      -> {mesh_obj}")
+    print(f"Saved 3D mesh (Stanford PLY)       -> {mesh_ply}")
+    print(f"  Mesh Geometry                    : {mesh_res.num_vertices:,} vertices, {mesh_res.num_triangles:,} triangles")
+
+    # 7. Save visual comparison plot
     fig, axes = plt.subplots(1, 3, figsize=(18, 5))
     axes[0].imshow(stereo_arr)
     axes[0].set_title(f"Synthetic Stereogram ({args.width}x{args.height})")

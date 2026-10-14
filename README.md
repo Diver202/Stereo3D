@@ -39,14 +39,43 @@ Generated outputs in `output/`:
 - `<name>_depth_color.png`: High-contrast colormapped depth visualization.
 - `<name>_depth.npy`: Raw floating-point depth array.
 - `<name>_analysis.png`: Diagnostic plot showing the input image, difference map, and depth map.
+- `<name>_mesh.obj`: 3D polygonal mesh in Wavefront OBJ format with vertex colors, normals, and material definitions.
+- `<name>_mesh.ply`: 3D mesh in Stanford binary PLY format with embedded RGB vertex colors.
 
 Optional flags:
 - `--period <int>`: Manually specify base period $S_0$ in pixels.
 - `--max-disparity <int>`: Maximum disparity in pixels.
 - `--view-mode {parallel,cross}`: Set viewing mode (default: `parallel`).
+- `--mesh-step <int>`: Subsampling step for 3D mesh grid (default: `2`, `1` for 1:1 pixel resolution).
+- `--z-scale <float>`: Height displacement scale factor.
+- `--mesh-color {rgb,depth,uniform}`: Vertex coloring strategy (default: `rgb`).
+- `--view`: Open interactive 3D viewer immediately after reconstruction.
+- `--no-mesh`: Disable 3D mesh generation.
 
-### 2. Synthetic Generation & Testing
-Generate synthetic stereograms and validate period estimation and depth recovery against ground-truth geometry:
+### 2. Interactive 3D Object Viewer
+View the generated 3D object directly without external software:
+
+```powershell
+python view_3d.py [model_name_or_path]
+```
+
+If run without arguments, `view_3d.py` automatically discovers and opens the most recently generated model in `output/`:
+```powershell
+python view_3d.py
+```
+
+Viewer Navigation & Controls:
+- **Rotate / Orbit**: Left click and drag.
+- **Pan / Translate**: Right click and drag (or Shift + Left drag).
+- **Zoom**: Scroll wheel (or Ctrl + Left drag).
+- **`[W]`**: Toggle wireframe overlay.
+- **`[C]`**: Cycle color modes (RGB texture, Turbo elevation heatmap, surface normals, studio clay).
+- **`[B]`**: Cycle background themes (Dark slate, pitch black, studio gray).
+- **`[R]`**: Reset camera view.
+- **`[Q]` / `[ESC]`**: Exit viewer.
+
+### 3. Synthetic Generation & Testing
+Generate synthetic stereograms and validate period estimation, depth recovery, and 3D mesh generation against ground-truth geometry:
 
 ```powershell
 python generate_and_test.py
