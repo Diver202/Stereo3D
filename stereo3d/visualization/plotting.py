@@ -1,5 +1,5 @@
 """
-Visualization utilities for period estimation and disparity analysis.
+Visualization utilities for period estimation and depth map analysis.
 """
 
 from pathlib import Path
@@ -20,9 +20,8 @@ def plot_period_analysis(
 ) -> plt.Figure:
     """
     Plot diagnostic analysis showing:
-    1. Metric curve (Autocorrelation or Photoshop Difference) with identified period & harmonics.
-    2. The shifted Difference Map at the detected base period, visualizing how background cancels
-       out and foreground object contours emerge.
+    1. Metric curve (Autocorrelation or Mean Absolute Difference) with identified period and harmonics.
+    2. The shifted difference map at the detected base period, visualizing pattern cancellation.
     """
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
@@ -56,9 +55,58 @@ def plot_period_analysis(
     ax_diff = axes[1]
     diff_map = image.compute_difference_map(result.period)
     im = ax_diff.imshow(diff_map, cmap="inferno", vmin=0.0, vmax=np.percentile(diff_map, 99))
-    ax_diff.set_title(f"Shifted Difference Map at Lag = {result.period}px\n(Photoshop Difference: Silhouette Emergence)")
+    ax_diff.set_title(f"Shifted Difference Map at Lag = {result.period}px\n(Background Cancellation and Contour Emergence)")
     ax_diff.set_axis_off()
     fig.colorbar(im, ax=ax_diff, fraction=0.046, pad=0.04, label="Pixel Difference")
+
+    plt.tight_layout()
+
+    if save_path:
+        out = Path(save_path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(out, dpi=150, bbox_inches="tight")
+
+    if show:
+        plt.show()
+
+    return fig
+
+
+def plot_depth_analysis(
+    image: StereogramImage,
+    depth_map: np.ndarray,
+    period_result: Optional[PeriodEstimationResult] = None,
+    save_path: Optional[Union[str, Path]] = None,
+    show: bool = False,
+) -> plt.Figure:
+    """
+    Plot comprehensive depth reconstruction analysis:
+    1. Original input stereogram image.
+    2. Difference map at the base period (if available).
+    3. Reconstructed depth map with colormap.
+    """
+    num_panels = 3 if period_result is not None else 2
+    fig, axes = plt.subplots(1, num_panels, figsize=(6 * num_panels, 5))
+
+    # Panel 1: Original Stereogram
+    axes[0].imshow(image.rgb)
+    axes[0].set_title(f"Input Stereogram ({image.width}x{image.height})")
+    axes[0].set_axis_off()
+
+    idx = 1
+    # Panel 2: Difference map at period
+    if period_result is not None:
+        diff_map = image.compute_difference_map(period_result.period)
+        axes[idx].imshow(diff_map, cmap="inferno", vmin=0.0, vmax=np.percentile(diff_map, 99))
+        axes[idx].set_title(f"Shifted Difference Map ({period_result.period}px)")
+        axes[idx].set_axis_off()
+        idx += 1
+
+    # Panel 3: Recovered Depth Map
+    im_depth = axes[idx].imshow(depth_map, cmap="turbo", vmin=0.0, vmax=1.0)
+    axes[idx].set_title("Reconstructed Depth Map")
+    axes[idx].set_axis_off()
+    fig.colorbar(im_depth, ax=axes[idx], fraction=0.046, pad=0.04, label="Normalized Depth")
 
     plt.tight_layout()
 

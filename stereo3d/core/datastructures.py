@@ -136,9 +136,9 @@ class StereogramImage:
 
     def compute_difference_map(self, lag: int) -> np.ndarray:
         """
-        Replicates Photoshop's 'Difference' blend mode shifted horizontally by `lag`.
+        Computes the horizontal difference map shifted by `lag`:
+        |I(x, y) - I(x + lag, y)|
 
-        Computes: |I(x, y) - I(x + lag, y)|
         Where repeating patterns match, the difference approaches 0.
         Where depth introduces disparities, residual contours emerge.
 

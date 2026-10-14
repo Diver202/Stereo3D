@@ -45,7 +45,7 @@ def test_synthetic_autocorrelation_period_estimation():
 
 
 def test_synthetic_difference_period_estimation():
-    # Ground truth period = 80 px (Photoshop difference method)
+    # Ground truth period = 80 px (Difference / SAD method)
     gt_period = 80
     stereo_arr, _ = generate_synthetic_stereogram(
         width=480,

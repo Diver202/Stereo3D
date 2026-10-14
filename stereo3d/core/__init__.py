@@ -8,10 +8,18 @@ from .period import (
     PeriodEstimationResult,
     estimate_base_period,
 )
+from .depth import (
+    DepthExtractor,
+    DepthMapResult,
+    extract_depth_map,
+)
 
 __all__ = [
     "StereogramImage",
     "PeriodEstimator",
     "PeriodEstimationResult",
     "estimate_base_period",
+    "DepthExtractor",
+    "DepthMapResult",
+    "extract_depth_map",
 ]

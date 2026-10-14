@@ -37,7 +37,7 @@ class PeriodEstimator:
 
     Supports:
     - Normalized Autocorrelation (finds prominent correlation peaks)
-    - Mean Absolute Difference (SAD, directly models Photoshop's 'Difference' layer shift)
+    - Mean Absolute Difference (SAD, evaluates horizontal shift cancellation)
     - Flexible row sampling (middle rows, distributed sample, or full image)
     - Robust aggregation (median across rows to eliminate foreground depth distortions)
     """
@@ -56,7 +56,7 @@ class PeriodEstimator:
         -----------
         min_period: Minimum lag in pixels to consider (avoids trivial micro-texture correlations near lag 0).
         max_period: Maximum lag in pixels. If None, defaults to width // 2.
-        method: 'autocorrelation' (peaks) or 'difference' (Photoshop-like valleys).
+        method: 'autocorrelation' (peaks) or 'difference' (valleys).
         row_sampling: 'distributed' (sample evenly across height), 'middle' (center slice), 'all' (every row).
         row_count: Number of rows to sample if row_sampling is 'distributed' or 'middle'.
         aggregation: 'median' (outlier-resistant against foreground objects) or 'mean'.
@@ -122,7 +122,6 @@ class PeriodEstimator:
     ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Compute Mean Absolute Difference (SAD) curve for lags in [min_lag, max_lag].
-        Simulates sliding the image horizontally in Photoshop with Difference blend mode.
         """
         num_rows, width = rows.shape
         lags = np.arange(min_lag, max_lag + 1)

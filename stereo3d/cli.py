@@ -2,194 +2,213 @@ import argparse
 from pathlib import Path
 import sys
 
-from PIL import Image
-
 from .core.datastructures import StereogramImage
+from .core.depth import DepthExtractor
 from .core.period import PeriodEstimator
-from .visualization.plotting import plot_period_analysis
-from .utils.synthetic import generate_synthetic_stereogram
+from .visualization.plotting import plot_depth_analysis
 
 
-def run_analysis(args: argparse.Namespace) -> int:
-    image_path = Path(args.image)
-    if not image_path.exists():
-        print(f"Error: Image file not found: {image_path}", file=sys.stderr)
+def resolve_image_path(image_arg: str, input_dir: Path = Path("input")) -> Path:
+    """
+    Resolve image path checking both direct path and the input/ directory.
+    """
+    direct_path = Path(image_arg)
+    if direct_path.is_file():
+        return direct_path
+
+    # Check inside input_dir
+    input_candidate = input_dir / image_arg
+    if input_candidate.is_file():
+        return input_candidate
+
+    # Try matching with common image extensions if suffix was omitted
+    if not direct_path.suffix:
+        for ext in [".png", ".jpg", ".jpeg", ".bmp", ".webp"]:
+            cand = input_dir / f"{image_arg}{ext}"
+            if cand.is_file():
+                return cand
+
+    raise FileNotFoundError(
+        f"Image '{image_arg}' not found. Searched at '{direct_path.resolve()}' "
+        f"and inside '{input_dir.resolve()}'."
+    )
+
+
+def process_image(args: argparse.Namespace) -> int:
+    try:
+        image_path = resolve_image_path(args.image, input_dir=Path(args.input_dir))
+    except FileNotFoundError as err:
+        print(f"Error: {err}", file=sys.stderr)
         return 1
 
-    print(f"Loading stereogram from: {image_path}")
-    stereo_img = StereogramImage.from_file(image_path)
-    print(f"Image dimensions: {stereo_img.width}x{stereo_img.height} (WxH)")
-
-    estimator = PeriodEstimator(
-        min_period=args.min_period,
-        max_period=args.max_period,
-        method=args.method,
-        row_sampling=args.sampling,
-        row_count=args.rows,
-        aggregation=args.aggregation,
-    )
-
-    print(f"Estimating base period using '{args.method}' method (sampling: '{args.sampling}')...")
-    result = estimator.estimate(stereo_img)
-
-    print("\n" + "=" * 45)
-    print(f"ESTIMATION RESULTS:")
-    print(f"  Fundamental Period (S_0) : {result.period} pixels")
-    print(f"  Confidence Score         : {result.confidence:.3f}")
-    print(f"  Method                   : {result.method}")
-    if result.harmonics:
-        print(f"  Harmonics Detected       : {result.harmonics} pixels")
-    print("=" * 45 + "\n")
-
-    if args.plot or args.show:
-        plot_path = args.plot or f"output/period_analysis_{image_path.stem}.png"
-        print(f"Generating diagnostic plot -> {plot_path}")
-        plot_period_analysis(result, stereo_img, save_path=plot_path, show=args.show)
-
-    return 0
-
-
-def run_demo(args: argparse.Namespace) -> int:
-    out_dir = Path("output")
+    out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    gt_period = args.ground_truth_period
-    print(f"Generating synthetic autostereogram (ground-truth base period: {gt_period}px)...")
-    stereo_arr, depth_map = generate_synthetic_stereogram(
-        width=args.width,
-        height=args.height,
-        base_period=gt_period,
-        shape_type=args.shape,
+    print("==================================================")
+    print("STEREO3D: DEPTH MAP RECONSTRUCTION")
+    print("==================================================")
+    print(f"Input Image     : {image_path}")
+
+    stereo_img = StereogramImage.from_file(image_path)
+    print(f"Dimensions      : {stereo_img.width}x{stereo_img.height} (WxH)")
+
+    # 1. Base period determination
+    period_result = None
+    if args.period is not None:
+        period = args.period
+        print(f"Base Period     : {period} px (manual override)")
+    else:
+        print(f"Estimating base period via '{args.method}' method...")
+        estimator = PeriodEstimator(
+            method=args.method,
+            row_sampling=args.sampling,
+            min_period=args.min_period,
+            max_period=args.max_period,
+        )
+        period_result = estimator.estimate(stereo_img)
+        period = period_result.period
+        print(f"Detected Period : {period} px (confidence: {period_result.confidence:.3f})")
+        if period_result.harmonics:
+            print(f"Harmonics       : {period_result.harmonics} px")
+
+    # 2. Dense Depth Extraction
+    max_d = args.max_disparity
+    print(f"Extracting dense depth map (view mode: '{args.view_mode}')...")
+    extractor = DepthExtractor(
+        base_period=period,
+        max_disparity=max_d,
+        view_mode=args.view_mode,
+        window_size=args.window_size,
+        subpixel=not args.no_subpixel,
+    )
+    depth_result = extractor.extract(stereo_img)
+    print(f"Disparity Range : [0, {depth_result.max_disparity}] px")
+
+    # 3. Save All Outputs
+    stem = image_path.stem
+    depth_png = out_dir / f"{stem}_depth.png"
+    depth_16bit = out_dir / f"{stem}_depth_16bit.png"
+    depth_color = out_dir / f"{stem}_depth_color.png"
+    depth_npy = out_dir / f"{stem}_depth.npy"
+    analysis_plot = out_dir / f"{stem}_analysis.png"
+
+    depth_result.save_png(depth_png)
+    depth_result.save_16bit(depth_16bit)
+    depth_result.save_color(depth_color, cmap=args.colormap)
+    depth_result.save_numpy(depth_npy)
+
+    plot_depth_analysis(
+        image=stereo_img,
+        depth_map=depth_result.depth,
+        period_result=period_result,
+        save_path=analysis_plot,
+        show=args.show,
     )
 
-    demo_img_path = out_dir / "synthetic_stereogram.png"
-    Image.fromarray(stereo_arr).save(demo_img_path)
-    print(f"Saved synthetic stereogram to: {demo_img_path}")
-
-    stereo_img = StereogramImage.from_numpy(stereo_arr, source_path=demo_img_path)
-
-    # 1. Test Autocorrelation
-    est_corr = PeriodEstimator(
-        method="autocorrelation",
-        row_sampling=args.sampling,
-        min_period=25,
-    )
-    res_corr = est_corr.estimate(stereo_img)
-
-    # 2. Test Photoshop Difference method
-    est_diff = PeriodEstimator(
-        method="difference",
-        row_sampling=args.sampling,
-        min_period=25,
-    )
-    res_diff = est_diff.estimate(stereo_img)
-
-    print("\n" + "=" * 50)
-    print("DEMO VERIFICATION RESULTS:")
-    print(f"  Ground Truth Period : {gt_period} px")
-    print(f"  Autocorrelation Est : {res_corr.period} px (Confidence: {res_corr.confidence:.3f})")
-    print(f"  Difference (PS) Est : {res_diff.period} px (Confidence: {res_diff.confidence:.3f})")
-    print("=" * 50 + "\n")
-
-    plot_path = out_dir / "demo_period_analysis.png"
-    plot_period_analysis(res_diff, stereo_img, save_path=plot_path, show=args.show)
-    print(f"Saved period analysis visualization to: {plot_path}")
-
+    print("--------------------------------------------------")
+    print("OUTPUT FILES SAVED:")
+    print(f"  Standard Depth (8-bit PNG)  : {depth_png}")
+    print(f"  3D Displacement (16-bit PNG): {depth_16bit}")
+    print(f"  Colorized Depth (RGB PNG)   : {depth_color}")
+    print(f"  Raw Array (NumPy .npy)      : {depth_npy}")
+    print(f"  Diagnostic Report (Plot PNG): {analysis_plot}")
+    print("==================================================")
+    print("Depth extraction completed successfully.")
     return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Stereo3D: Autostereogram depth extraction and period analyzer."
+        description="Reconstruct dense 3D depth maps from autostereograms."
     )
-    subparsers = parser.add_subparsers(dest="command", required=True)
-
-    # analyze command
-    analyze_parser = subparsers.add_parser("analyze", help="Analyze an autostereogram image file")
-    analyze_parser.add_argument("image", type=str, help="Path to stereogram image file")
-    analyze_parser.add_argument(
+    parser.add_argument(
+        "image",
+        type=str,
+        help="Path or filename of the stereogram image (searches current directory and input/ folder)",
+    )
+    parser.add_argument(
+        "--period",
+        type=int,
+        default=None,
+        help="Manual base period S_0 in pixels. If omitted, automatically estimated.",
+    )
+    parser.add_argument(
+        "--max-disparity",
+        type=int,
+        default=None,
+        help="Maximum disparity shift in pixels. Defaults to 35%% of base period.",
+    )
+    parser.add_argument(
         "--method",
         choices=["autocorrelation", "difference"],
         default="autocorrelation",
-        help="Method to use (autocorrelation or difference/Photoshop)",
+        help="Period estimation method ('autocorrelation' or 'difference').",
     )
-    analyze_parser.add_argument(
+    parser.add_argument(
         "--sampling",
         choices=["distributed", "middle", "all"],
         default="distributed",
-        help="Row sampling strategy",
+        help="Row sampling strategy for period estimation.",
     )
-    analyze_parser.add_argument(
-        "--rows",
+    parser.add_argument(
+        "--view-mode",
+        choices=["parallel", "cross"],
+        default="parallel",
+        help="Stereogram viewing mode ('parallel' for standard Magic Eye, 'cross' for cross-eyed).",
+    )
+    parser.add_argument(
+        "--window-size",
         type=int,
-        default=64,
-        help="Number of rows to sample",
+        default=7,
+        help="Spatial aggregation window size (odd integer).",
     )
-    analyze_parser.add_argument(
-        "--aggregation",
-        choices=["median", "mean"],
-        default="median",
-        help="Row aggregation method",
+    parser.add_argument(
+        "--no-subpixel",
+        action="store_true",
+        help="Disable subpixel quadratic disparity refinement.",
     )
-    analyze_parser.add_argument(
+    parser.add_argument(
         "--min-period",
         type=int,
         default=25,
-        help="Minimum period in pixels to search",
+        help="Minimum period in pixels for search range.",
     )
-    analyze_parser.add_argument(
+    parser.add_argument(
         "--max-period",
         type=int,
         default=None,
-        help="Maximum period in pixels to search",
+        help="Maximum period in pixels for search range.",
     )
-    analyze_parser.add_argument(
-        "--plot",
+    parser.add_argument(
+        "--colormap",
         type=str,
-        default=None,
-        help="Output path for diagnostic plot",
+        default="turbo",
+        help="Matplotlib colormap for colorized depth output (default: 'turbo').",
     )
-    analyze_parser.add_argument(
+    parser.add_argument(
+        "--input-dir",
+        type=str,
+        default="input",
+        help="Default folder containing input images.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="output",
+        help="Folder to store reconstructed depth maps.",
+    )
+    parser.add_argument(
         "--show",
         action="store_true",
-        help="Show interactive plot window",
+        help="Display diagnostic figure interactively.",
     )
-
-    # demo command
-    demo_parser = subparsers.add_parser("demo", help="Run self-test demo on synthetic stereogram")
-    demo_parser.add_argument(
-        "--ground-truth-period",
-        type=int,
-        default=120,
-        help="Base period for synthetic stereogram",
-    )
-    demo_parser.add_argument(
-        "--shape",
-        choices=["circle", "box"],
-        default="circle",
-        help="Hidden 3D shape type",
-    )
-    demo_parser.add_argument("--width", type=int, default=640, help="Image width")
-    demo_parser.add_argument("--height", type=int, default=480, help="Image height")
-    demo_parser.add_argument(
-        "--sampling",
-        choices=["distributed", "middle", "all"],
-        default="distributed",
-        help="Row sampling strategy",
-    )
-    demo_parser.add_argument("--show", action="store_true", help="Display plot interactively")
-
     return parser
 
 
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
-    if args.command == "analyze":
-        return run_analysis(args)
-    elif args.command == "demo":
-        return run_demo(args)
-    return 0
+    return process_image(args)
 
 
 if __name__ == "__main__":
