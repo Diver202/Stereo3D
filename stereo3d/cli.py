@@ -145,7 +145,11 @@ def process_image(args: argparse.Namespace) -> int:
 
     if args.view and mesh_result is not None:
         print("\nLaunching 3D object viewer...")
-        launch_viewer(mesh_obj)
+        launch_viewer(
+            mesh_obj,
+            engine=args.viewer_engine,
+            default_mode=args.view_mode_3d,
+        )
 
     return 0
 
@@ -278,6 +282,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--view",
         action="store_true",
         help="Open interactive 3D viewer immediately after reconstruction.",
+    )
+    parser.add_argument(
+        "--view-mode-3d",
+        choices=["untextured", "material", "depth"],
+        default="untextured",
+        help="Initial 3D viewer shading mode (default: 'untextured' shaded clay).",
+    )
+    parser.add_argument(
+        "--viewer-engine",
+        choices=["pbr", "classic"],
+        default="pbr",
+        help="3D rendering engine ('pbr' for Filament Global Illumination or 'classic' for OpenGL).",
     )
     parser.add_argument(
         "--show",

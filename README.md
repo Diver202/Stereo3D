@@ -50,6 +50,8 @@ Optional flags:
 - `--z-scale <float>`: Height displacement scale factor.
 - `--mesh-color {rgb,depth,uniform}`: Vertex coloring strategy (default: `rgb`).
 - `--view`: Open interactive 3D viewer immediately after reconstruction.
+- `--view-mode-3d {untextured,material,depth}`: Initial 3D shading mode (default: `untextured`).
+- `--viewer-engine {pbr,classic}`: 3D engine ('pbr' for Global Illumination or 'classic' for OpenGL).
 - `--no-mesh`: Disable 3D mesh generation.
 
 ### 2. Interactive 3D Object Viewer
@@ -59,18 +61,20 @@ View the generated 3D object directly without external software:
 python view_3d.py [model_name_or_path]
 ```
 
-If run without arguments, `view_3d.py` automatically discovers and opens the most recently generated model in `output/`:
-```powershell
-python view_3d.py
-```
+By default, the viewer starts in **Untextured Shaded Clay mode** with hardware-accelerated **Global Illumination** (Image-Based Lighting) and directional sunlight with soft shadows, making surface contours and relief immediately clear without visual camouflage from repeating pattern textures.
 
-Viewer Navigation & Controls:
+Options:
+- `--mode {untextured,material,depth}`: Starting display mode (default: `untextured`).
+- `--engine {pbr,classic}`: Render engine ('pbr' for Filament Global Illumination, 'classic' for OpenGL).
+
+Interactive Controls:
+- **Swap Material / Untextured**: Click `[Swap: Material / Untextured]` in the PBR sidebar or press `[M]` / `[T]` in classic mode.
+- **Toggle Depth Heatmap**: Click `[Toggle Depth Heatmap]` in the sidebar or press `[C]`.
 - **Rotate / Orbit**: Left click and drag.
 - **Pan / Translate**: Right click and drag (or Shift + Left drag).
 - **Zoom**: Scroll wheel (or Ctrl + Left drag).
+- **Settings Sidebar**: Use the right-hand panel to adjust Sunlight intensity, sun angle, and Global Illumination (IBL) environment reflections.
 - **`[W]`**: Toggle wireframe overlay.
-- **`[C]`**: Cycle color modes (RGB texture, Turbo elevation heatmap, surface normals, studio clay).
-- **`[B]`**: Cycle background themes (Dark slate, pitch black, studio gray).
 - **`[R]`**: Reset camera view.
 - **`[Q]` / `[ESC]`**: Exit viewer.
 
