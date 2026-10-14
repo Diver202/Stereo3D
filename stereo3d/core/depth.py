@@ -97,18 +97,24 @@ class DepthExtractor:
         median_radius: int = 7,
         bilateral_sigma_color: float = 3.0,
         bilateral_sigma_space: float = 7.0,
+        robust_norm: bool = True,
+        bg_prior: bool = True,
+        bg_threshold: float = 0.88,
     ):
         """
         Parameters:
         -----------
         base_period: Fundamental repetition interval S_0 in pixels. If None, automatically estimated.
-        max_disparity: Maximum horizontal shift in pixels. If None, set to int(0.35 * base_period).
+        max_disparity: Maximum horizontal shift in pixels. If None, set to min(int(0.35 * base_period), 75).
         view_mode: 'parallel' (standard) or 'cross' (cross-eyed).
         window_size: Spatial aggregation kernel size (odd integer).
         subpixel: Whether to apply quadratic subpixel refinement.
         median_radius: Median filter size for removing impulse noise (odd integer).
         bilateral_sigma_color: Bilateral filter color/intensity threshold.
         bilateral_sigma_space: Bilateral filter spatial threshold.
+        robust_norm: Normalize relative to active foreground disparity instead of hard max_d ceiling.
+        bg_prior: Suppress ambiguous false-positive matches in flat background regions.
+        bg_threshold: Ratio threshold relative to background cost for ambiguity suppression.
         """
         self.base_period = base_period
         self.max_disparity = max_disparity
@@ -118,6 +124,9 @@ class DepthExtractor:
         self.median_radius = median_radius if median_radius % 2 == 1 else median_radius + 1
         self.bilateral_sigma_color = bilateral_sigma_color
         self.bilateral_sigma_space = bilateral_sigma_space
+        self.robust_norm = robust_norm
+        self.bg_prior = bg_prior
+        self.bg_threshold = bg_threshold
 
     def extract(self, image: StereogramImage) -> DepthMapResult:
         """
@@ -134,7 +143,8 @@ class DepthExtractor:
         # 2. Determine disparity range
         max_d = self.max_disparity
         if max_d is None:
-            max_d = max(4, int(round(period * 0.35)))
+            max_d = min(int(round(period * 0.35)), 75)
+            max_d = max(max_d, 15)
 
         max_d = min(max_d, period - 10)
         if max_d < 1:
@@ -177,6 +187,13 @@ class DepthExtractor:
         # 4. Disparity selection (Winner-Takes-All)
         best_d = np.argmin(cost_vol, axis=2).astype(np.float32)
 
+        # Background prior: suppress ambiguous non-zero disparities in background regions
+        if self.bg_prior:
+            cost_bg = cost_vol[:, :, 0]
+            min_cost = np.min(cost_vol, axis=2)
+            ambiguous = (min_cost >= self.bg_threshold * cost_bg) & (best_d > 4)
+            best_d[ambiguous] = 0.0
+
         # Confidence map: difference between second lowest cost and lowest cost
         sorted_costs = np.sort(cost_vol, axis=2)
         min_cost = sorted_costs[:, :, 0]
@@ -211,7 +228,16 @@ class DepthExtractor:
             )
 
         # Normalized depth in [0.0, 1.0]
-        norm_depth = np.clip(filtered_d / float(max_d), 0.0, 1.0).astype(np.float32)
+        if self.robust_norm:
+            active_mask = filtered_d > 1.0
+            if np.any(active_mask):
+                d_max_active = float(np.percentile(filtered_d[active_mask], 99.0))
+            else:
+                d_max_active = float(max_d)
+            d_max_active = max(d_max_active, 1.0)
+            norm_depth = np.clip(filtered_d / d_max_active, 0.0, 1.0).astype(np.float32)
+        else:
+            norm_depth = np.clip(filtered_d / float(max_d), 0.0, 1.0).astype(np.float32)
 
         return DepthMapResult(
             depth=norm_depth,
@@ -234,6 +260,8 @@ def extract_depth_map(
     max_disparity: Optional[int] = None,
     view_mode: Literal["parallel", "cross"] = "parallel",
     window_size: int = 7,
+    robust_norm: bool = True,
+    bg_prior: bool = True,
 ) -> DepthMapResult:
     """
     Convenience function to extract dense depth map from an autostereogram image.
@@ -250,5 +278,7 @@ def extract_depth_map(
         max_disparity=max_disparity,
         view_mode=view_mode,
         window_size=window_size,
+        robust_norm=robust_norm,
+        bg_prior=bg_prior,
     )
     return extractor.extract(stereo_img)

@@ -173,9 +173,14 @@ class PeriodEstimator:
                 sig_lags = detected_lags[sig_mask]
 
                 if len(sig_lags) > 0:
-                    best_period = int(sig_lags[0])
+                    # In parallel autostereograms, background has disparity 0 (maximum period S_0).
+                    # All foreground objects have smaller repetition intervals (S = S_0 - d < S_0).
+                    # Therefore, within the fundamental band (before 2nd harmonic ~1.75 * min_lag),
+                    # the true base period S_0 is the maximum candidate period.
+                    fund_band = [lag for lag in sig_lags if lag < 1.75 * sig_lags[0]]
+                    best_period = int(np.max(fund_band))
                     confidence = float(np.clip(max_prom / (np.ptp(curve) + 1e-6), 0.0, 1.0))
-                    harmonics = [int(lag) for lag in sig_lags[1:]]
+                    harmonics = [int(lag) for lag in sig_lags if lag > best_period]
                 else:
                     best_period = int(detected_lags[np.argmax(prominences)])
                     confidence = float(curve[np.where(lags == best_period)[0][0]])
@@ -204,16 +209,33 @@ class PeriodEstimator:
                 sig_lags = detected_lags[sig_mask]
 
                 if len(sig_lags) > 0:
-                    best_period = int(sig_lags[0])
+                    fund_band = [lag for lag in sig_lags if lag < 1.75 * sig_lags[0]]
+                    best_period = int(np.max(fund_band))
                     confidence = float(np.clip(max_prom / (np.ptp(curve) + 1e-6), 0.0, 1.0))
-                    harmonics = [int(lag) for lag in sig_lags[1:]]
+                    harmonics = [int(lag) for lag in sig_lags if lag > best_period]
                 else:
                     best_period = int(detected_lags[np.argmax(prominences)])
                     confidence = 0.5
                     harmonics = []
 
-        else:
-            raise ValueError(f"Unknown method: {self.method}")
+        # Check top margin: in autostereograms, the top margin is almost always pure background
+        # (sky or canvas border). If the top margin displays a prominent fundamental period,
+        # it provides ground-truth guidance for the true background base period S_0.
+        top_start = int(0.02 * image.height)
+        top_end = max(int(0.15 * image.height), top_start + 10)
+        top_slice = image.gray[top_start:top_end]
+        if top_slice.shape[0] >= 5:
+            _, curve_top = self.compute_autocorrelation_curve(top_slice, min_lag, max_lag)
+            peaks_top, _ = find_peaks(curve_top, distance=max(5, self.min_period // 2))
+            if len(peaks_top) > 0:
+                proms_top = peak_prominences(curve_top, peaks_top)[0]
+                top_sig = [lags[p] for i, p in enumerate(peaks_top) if proms_top[i] > 0.15]
+                if len(top_sig) > 0:
+                    fund_top = [l for l in top_sig if l < 1.75 * top_sig[0]]
+                    if len(fund_top) > 0:
+                        top_period = int(np.max(fund_top))
+                        if top_period >= best_period:
+                            best_period = top_period
 
         return PeriodEstimationResult(
             period=best_period,

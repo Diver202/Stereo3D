@@ -80,6 +80,9 @@ def process_image(args: argparse.Namespace) -> int:
         view_mode=args.view_mode,
         window_size=args.window_size,
         subpixel=not args.no_subpixel,
+        robust_norm=not args.no_robust_norm,
+        bg_prior=not args.no_bg_prior,
+        bg_threshold=args.bg_threshold,
     )
     depth_result = extractor.extract(stereo_img)
     print(f"Disparity Range : [0, {depth_result.max_disparity}] px")
@@ -166,6 +169,22 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-subpixel",
         action="store_true",
         help="Disable subpixel quadratic disparity refinement.",
+    )
+    parser.add_argument(
+        "--no-robust-norm",
+        action="store_true",
+        help="Disable robust active depth percentile scaling.",
+    )
+    parser.add_argument(
+        "--no-bg-prior",
+        action="store_true",
+        help="Disable background ambiguity prior.",
+    )
+    parser.add_argument(
+        "--bg-threshold",
+        type=float,
+        default=0.88,
+        help="Ratio threshold for background prior ambiguity suppression (default: 0.88).",
     )
     parser.add_argument(
         "--min-period",
