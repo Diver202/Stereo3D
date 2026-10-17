@@ -67,7 +67,43 @@ Optional flags:
 - `--viewer-engine {pbr,classic}`: 3D engine ('pbr' for Global Illumination or 'classic' for OpenGL).
 - `--no-mesh`: Disable 3D mesh generation.
 
-### 2. Interactive 3D Object Viewer
+### 2. Autostereogram Generation from Depth Maps
+Create custom, high-entropy autostereograms from any 2D/3D depth map (such as depth maps rendered from Blender, z-buffers, or heightfields):
+
+Place your depth map inside `depthmaps/` (e.g. `depthmaps/MonkeyDepthMap.png`), then run:
+
+```powershell
+python generate_stereogram.py MonkeyDepthMap.png --color emerald
+```
+
+If no file argument is given, it automatically selects the newest depth map in `depthmaps/`.
+
+Features:
+- **Monocular Concealment**: Multi-scale organic fractal noise textures designed to eliminate seam lines, brightness banding, and contour silhouettes when inspected with 2D monocular vision.
+- **Predominant Color Control**: Preset themes (`blue`, `emerald`, `crimson`, `amber`, `purple`, `cyan`, `cyberpunk`, `sunset`, `matrix`, `monochrome`, `rainbow`) or custom hex codes (e.g. `--color "#2E8B57"`).
+- **Stochastic Generation**: Generates a unique, randomized texture pattern on every run (or use `--seed <int>` for deterministic reproduction).
+- **Alignment Markers**: Render dual visual eye-fusion dots at the top of the canvas via `--fusion-dots`.
+
+Options:
+- `--color <str>`: Predominant color preset or hex code `#RRGGBB` (default: `blue`).
+- `--pattern {organic,speckle,cellular,plasma}`: Noise pattern style (default: `organic`).
+- `--period <int>`: Base repeating period $S_0$ in pixels (default: auto, approx width / 14).
+- `--max-disparity <int>`: Maximum disparity shift in pixels (default: auto, approx 25% of base period).
+- `--seed <int>`: Random seed for deterministic generation.
+- `--invert`: Invert depth displacement (swap foreground elevation and background depth).
+- `--fusion-dots`: Render two alignment fusion markers at the top of the autostereogram canvas.
+- `--output-dir <str>`: Output directory (default: `autostereogram_outputs`).
+
+Generated outputs in `autostereogram_outputs/`:
+- `<name>_autostereogram.png`: Full-resolution autostereogram image ready for viewing.
+- `<name>_autostereogram_analysis.png`: Diagnostic plot displaying the input depth map side-by-side with the autostereogram and fusion markers.
+
+You can immediately reconstruct and view the 3D surface model from any generated autostereogram:
+```powershell
+python main.py autostereogram_outputs/MonkeyDepthMap_autostereogram.png --postprocess --view
+```
+
+### 3. Interactive 3D Object Viewer
 View the generated 3D object directly without external software:
 
 ```powershell
