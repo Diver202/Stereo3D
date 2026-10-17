@@ -150,6 +150,28 @@ class StereogramImage:
         diff = np.abs(self.gray[:, lag:] - self.gray[:, :-lag])
         return diff
 
+    def crop(self, margin_left: int, margin_right: int) -> "StereogramImage":
+        """
+        Crop horizontal margins (e.g. dropping unrecoverable side bands).
+        """
+        if margin_left < 0 or margin_right < 0:
+            raise ValueError("Margins must be non-negative.")
+        if margin_left + margin_right >= self.width:
+            raise ValueError(
+                f"Total margins ({margin_left + margin_right}) exceed image width ({self.width})."
+            )
+
+        rgb_c = self.rgb[:, margin_left : self.width - margin_right, :].copy()
+        gray_c = self.gray[:, margin_left : self.width - margin_right].copy()
+        meta = dict(self.metadata)
+        meta["cropped_margins"] = (margin_left, margin_right)
+        return StereogramImage(
+            rgb=rgb_c,
+            gray=gray_c,
+            source_path=self.source_path,
+            metadata=meta,
+        )
+
     def __repr__(self) -> str:
         name = self.source_path.name if self.source_path else "in-memory"
         return f"<StereogramImage '{name}' shape=({self.height}x{self.width})>"

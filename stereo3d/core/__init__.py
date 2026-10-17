@@ -17,6 +17,11 @@ from .mesh import (
     MeshGenerator,
     MeshResult,
 )
+from .postprocess import (
+    DepthPostprocessor,
+    PostprocessResult,
+    postprocess_depth_map,
+)
 
 __all__ = [
     "StereogramImage",
@@ -28,4 +33,7 @@ __all__ = [
     "extract_depth_map",
     "MeshGenerator",
     "MeshResult",
+    "DepthPostprocessor",
+    "PostprocessResult",
+    "postprocess_depth_map",
 ]

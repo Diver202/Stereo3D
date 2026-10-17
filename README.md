@@ -42,7 +42,20 @@ Generated outputs in `output/`:
 - `<name>_mesh.obj`: 3D polygonal mesh in Wavefront OBJ format with vertex colors, normals, and material definitions.
 - `<name>_mesh.ply`: 3D mesh in Stanford binary PLY format with embedded RGB vertex colors.
 
+When run with `--postprocess` (or `postprocess`), additional clean outputs are generated:
+- `<name>_depth_postprocessed.png`: Denoised 8-bit depth map with unrecoverable side bars cropped.
+- `<name>_depth_postprocessed_16bit.png`: Denoised 16-bit uint16 depth map (optimal for clean 3D displacement).
+- `<name>_depth_postprocessed_color.png`: Denoised Turbo colorized depth map.
+- `<name>_depth_postprocessed.npy`: Denoised floating-point array.
+- `<name>_postprocess_mask.png`: Binary mask showing all flagged and inpainted noise spikes/splotches.
+- `<name>_postprocess_analysis.png`: 3-panel diagnostic plot comparing Raw Depth vs Noise Mask vs Clean Depth.
+- `<name>_mesh_postprocessed.obj` / `.ply`: 3D meshes reconstructed from the clean post-processed depth map.
+
 Optional flags:
+- `--postprocess`: Activate the post-processing pipeline (drops side bars, multi-scale spike inpainting, splotch filtering, and bilateral smoothing).
+- `--no-drop-margins`: Do not crop the unrecoverable side margins during post-processing.
+- `--min-island-area <int>`: Minimum pixel area for isolated elevated islands (splotches below this are inpainted; default: `300`).
+- `--inpaint-method {navier_stokes,telea}`: Inpainting algorithm (default: `navier_stokes`).
 - `--period <int>`: Manually specify base period $S_0$ in pixels.
 - `--max-disparity <int>`: Maximum disparity in pixels.
 - `--view-mode {parallel,cross}`: Set viewing mode (default: `parallel`).

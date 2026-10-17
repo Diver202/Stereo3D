@@ -119,3 +119,54 @@ def plot_depth_analysis(
         plt.show()
 
     return fig
+
+
+def plot_postprocess_analysis(
+    raw_depth: np.ndarray,
+    spike_mask: np.ndarray,
+    post_depth: np.ndarray,
+    cropped_margins: Tuple[int, int] = (0, 0),
+    save_path: Optional[Union[str, Path]] = None,
+    show: bool = False,
+) -> plt.Figure:
+    """
+    Plot 3-panel comparative analysis for depth map post-processing:
+    1. Raw Extracted Depth Map (with margin crop indicators if applicable).
+    2. Flagged Noise / Spike Mask (inpaint targets).
+    3. Clean Post-Processed Depth Map.
+    """
+    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+
+    # Panel 1: Raw Depth
+    im_raw = axes[0].imshow(raw_depth, cmap="turbo", vmin=0.0, vmax=1.0)
+    m_left, m_right = cropped_margins
+    if m_left > 0 or m_right > 0:
+        axes[0].axvline(m_left, color="#ff3333", linestyle="--", lw=1.5, label=f"Left Margin ({m_left}px)")
+        axes[0].axvline(raw_depth.shape[1] - m_right, color="#ff3333", linestyle="--", lw=1.5, label=f"Right Margin ({m_right}px)")
+        axes[0].legend(loc="upper right", fontsize=8)
+    axes[0].set_title(f"1. Raw Depth ({raw_depth.shape[1]}x{raw_depth.shape[0]})")
+    axes[0].set_axis_off()
+
+    # Panel 2: Detected Noise / Spike Mask
+    spike_pct = float(np.mean(spike_mask > 0) * 100.0)
+    axes[1].imshow(spike_mask, cmap="inferno", vmin=0, vmax=255)
+    axes[1].set_title(f"2. Flagged Noise Mask ({spike_pct:.2f}% Inpainted)")
+    axes[1].set_axis_off()
+
+    # Panel 3: Post-Processed Depth
+    im_post = axes[2].imshow(post_depth, cmap="turbo", vmin=0.0, vmax=1.0)
+    axes[2].set_title(f"3. Post-Processed Depth ({post_depth.shape[1]}x{post_depth.shape[0]})")
+    axes[2].set_axis_off()
+    fig.colorbar(im_post, ax=axes[2], fraction=0.046, pad=0.04, label="Normalized Depth")
+
+    plt.tight_layout()
+
+    if save_path:
+        out = Path(save_path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(out, dpi=150, bbox_inches="tight")
+
+    if show:
+        plt.show()
+
+    return fig

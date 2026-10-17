@@ -6,7 +6,8 @@ from .core.datastructures import StereogramImage
 from .core.depth import DepthExtractor
 from .core.mesh import MeshGenerator
 from .core.period import PeriodEstimator
-from .visualization.plotting import plot_depth_analysis
+from .core.postprocess import DepthPostprocessor
+from .visualization.plotting import plot_depth_analysis, plot_postprocess_analysis
 from .visualization.viewer import launch_viewer
 
 
@@ -110,13 +111,66 @@ def process_image(args: argparse.Namespace) -> int:
         show=args.show,
     )
 
-    # 4. Generate 3D Surface Mesh
+    # 4. Post-Processing Pipeline (Spike removal, splotch filtering, margin drop, edge-aware inpainting)
+    post_result = None
+    cropped_stereo_img = stereo_img
+    post_png = None
+    post_16bit = None
+    post_color = None
+    post_npy = None
+    post_mask = None
+    post_analysis = None
+    mesh_post_obj = None
+    mesh_post_ply = None
+    mesh_post_result = None
+
+    if args.postprocess:
+        print("\n==================================================")
+        print("STEREO3D: POST-PROCESSING PIPELINE")
+        print("==================================================")
+        postprocessor = DepthPostprocessor(
+            drop_side_margins=not args.no_drop_margins,
+            min_island_area=args.min_island_area,
+            inpaint_method=args.inpaint_method,
+        )
+        post_result, cropped_stereo_img = postprocessor.postprocess(
+            depth_result.depth,
+            base_period=period,
+            stereogram=stereo_img,
+        )
+        print(f"Dropped Margins : Left {post_result.cropped_margins[0]}px, Right {post_result.cropped_margins[1]}px")
+        print(f"Post-proc Shape : {post_result.width}x{post_result.height} (WxH)")
+        print(f"Inpainted Noise : {post_result.spike_percentage:.2f}% of pixels")
+
+        post_png = out_dir / f"{stem}_depth_postprocessed.png"
+        post_16bit = out_dir / f"{stem}_depth_postprocessed_16bit.png"
+        post_color = out_dir / f"{stem}_depth_postprocessed_color.png"
+        post_npy = out_dir / f"{stem}_depth_postprocessed.npy"
+        post_mask = out_dir / f"{stem}_postprocess_mask.png"
+        post_analysis = out_dir / f"{stem}_postprocess_analysis.png"
+
+        post_result.save_png(post_png)
+        post_result.save_16bit(post_16bit)
+        post_result.save_color(post_color, cmap=args.colormap)
+        post_result.save_numpy(post_npy)
+        post_result.save_mask(post_mask)
+
+        plot_postprocess_analysis(
+            raw_depth=depth_result.depth,
+            spike_mask=post_result.spike_mask,
+            post_depth=post_result.depth,
+            cropped_margins=post_result.cropped_margins,
+            save_path=post_analysis,
+            show=args.show,
+        )
+
+    # 5. Generate 3D Surface Mesh
     mesh_obj = out_dir / f"{stem}_mesh.obj"
     mesh_ply = out_dir / f"{stem}_mesh.ply"
     mesh_result = None
 
     if not args.no_mesh:
-        print(f"Generating 3D mesh (step: {args.mesh_step}, z_scale: {args.z_scale or 'auto'})...")
+        print(f"\nGenerating 3D mesh (step: {args.mesh_step}, z_scale: {args.z_scale or 'auto'})...")
         mesh_gen = MeshGenerator(
             z_scale=args.z_scale,
             step=args.mesh_step,
@@ -129,6 +183,14 @@ def process_image(args: argparse.Namespace) -> int:
         mesh_result.save_obj(mesh_obj)
         mesh_result.save_ply(mesh_ply)
 
+        if post_result is not None:
+            print(f"Generating post-processed 3D mesh (step: {args.mesh_step})...")
+            mesh_post_obj = out_dir / f"{stem}_mesh_postprocessed.obj"
+            mesh_post_ply = out_dir / f"{stem}_mesh_postprocessed.ply"
+            mesh_post_result = mesh_gen.generate(post_result.depth, stereogram=cropped_stereo_img)
+            mesh_post_result.save_obj(mesh_post_obj)
+            mesh_post_result.save_ply(mesh_post_ply)
+
     print("--------------------------------------------------")
     print("OUTPUT FILES SAVED:")
     print(f"  Standard Depth (8-bit PNG)  : {depth_png}")
@@ -136,20 +198,33 @@ def process_image(args: argparse.Namespace) -> int:
     print(f"  Colorized Depth (RGB PNG)   : {depth_color}")
     print(f"  Raw Array (NumPy .npy)      : {depth_npy}")
     print(f"  Diagnostic Report (Plot PNG): {analysis_plot}")
+    if post_result is not None:
+        print(f"  Post-proc Depth (8-bit PNG) : {post_png}")
+        print(f"  Post-proc 16-bit (PNG)      : {post_16bit}")
+        print(f"  Post-proc Color (RGB PNG)   : {post_color}")
+        print(f"  Post-proc Array (.npy)      : {post_npy}")
+        print(f"  Inpainting Mask (PNG)       : {post_mask}")
+        print(f"  Post-proc Report (Plot PNG) : {post_analysis}")
     if mesh_result is not None:
         print(f"  3D Model (Wavefront OBJ)    : {mesh_obj}")
         print(f"  3D Model (Stanford PLY)     : {mesh_ply}")
         print(f"  Mesh Statistics             : {mesh_result.num_vertices:,} vertices, {mesh_result.num_triangles:,} triangles")
+    if mesh_post_result is not None:
+        print(f"  Post-proc 3D Model (OBJ)    : {mesh_post_obj}")
+        print(f"  Post-proc 3D Model (PLY)    : {mesh_post_ply}")
+        print(f"  Post-proc Mesh Statistics   : {mesh_post_result.num_vertices:,} vertices, {mesh_post_result.num_triangles:,} triangles")
     print("==================================================")
     print("Reconstruction completed successfully.")
 
-    if args.view and mesh_result is not None:
-        print("\nLaunching 3D object viewer...")
-        launch_viewer(
-            mesh_obj,
-            engine=args.viewer_engine,
-            default_mode=args.view_mode_3d,
-        )
+    if args.view:
+        active_mesh = mesh_post_obj if (mesh_post_obj is not None) else mesh_obj
+        if active_mesh is not None and active_mesh.is_file():
+            print(f"\nLaunching 3D object viewer for '{active_mesh.name}'...")
+            launch_viewer(
+                active_mesh,
+                engine=args.viewer_engine,
+                default_mode=args.view_mode_3d,
+            )
 
     return 0
 
@@ -296,6 +371,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="3D rendering engine ('pbr' for Filament Global Illumination or 'classic' for OpenGL).",
     )
     parser.add_argument(
+        "--postprocess",
+        action="store_true",
+        help="Apply advanced post-processing pipeline (drop unrecoverable side bars, multi-scale spike removal, splotch filtering, and edge-aware inpainting).",
+    )
+    parser.add_argument(
+        "--no-drop-margins",
+        action="store_true",
+        help="Do not drop the unrecoverable side margins during post-processing.",
+    )
+    parser.add_argument(
+        "--min-island-area",
+        type=int,
+        default=300,
+        help="Minimum pixel area for isolated elevated foreground islands (splotches below this are inpainted; default: 300).",
+    )
+    parser.add_argument(
+        "--inpaint-method",
+        choices=["navier_stokes", "telea"],
+        default="navier_stokes",
+        help="Inpainting algorithm ('navier_stokes' for PDE fluid flow, 'telea' for fast marching; default: 'navier_stokes').",
+    )
+    parser.add_argument(
         "--show",
         action="store_true",
         help="Display diagnostic figure interactively.",
@@ -305,7 +402,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     parser = build_parser()
-    args = parser.parse_args()
+    # Normalize 'postprocess' argument if passed without leading dashes
+    clean_argv = []
+    for arg in sys.argv[1:]:
+        if arg.lower() in ("postprocess", "-postprocess"):
+            clean_argv.append("--postprocess")
+        else:
+            clean_argv.append(arg)
+    args = parser.parse_args(clean_argv)
     return process_image(args)
 
 
