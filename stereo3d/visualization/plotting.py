@@ -2,8 +2,10 @@
 Visualization utilities for period estimation and depth map analysis.
 """
 
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional, Tuple, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
